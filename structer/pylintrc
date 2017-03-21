@@ -1,0 +1,2 @@
+[MESSAGES CONTROL]
+disable=locally-disabled,too-few-public-methods,no-member,unused-argument,inherit-non-class,unsubscriptable-object,not-an-iterable
