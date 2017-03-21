@@ -141,9 +141,6 @@ class VarStruct(Struct):
 class StructArray(object):
     """
     Contiguous span of named.Struct objects in a memoryview
-    The __len__ method returns byte count rather than element count,
-    required in order for a StructArray to work as a VarStruct element.
-    The __reversed__ method accounts for that distinction.
     """
     def __init__(self, mem, cls):
         self.mem = mem
@@ -157,7 +154,7 @@ class StructArray(object):
         return self.nbytes // self.itemsize
 
     def __len__(self):
-        return self.nbytes
+        return self.length
 
     def offset(self, index):
         """ Scale index to byte offset """
@@ -193,10 +190,6 @@ class StructArray(object):
             item = self.fetch(offset)
             offset += len(item)
             yield item
-
-    def __reversed__(self):
-        for index in range(self.length - 1, -1, -1):
-            yield self.getitem(index)
 
 class VarStructArray(StructArray):
     """
