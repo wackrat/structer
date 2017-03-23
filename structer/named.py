@@ -153,7 +153,7 @@ class StructArray(object):
         """ Element count """
         return self.nbytes // self.itemsize
 
-    def __len__(self):
+    def __len__(self): # pylint: disable=invalid-length-returned
         return self.length
 
     def offset(self, index):

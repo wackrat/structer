@@ -148,8 +148,9 @@ class LinkMap(Struct):
 
 class LinkMaps(object):
     """ Iterator for chain of LinkMap elements """
-    def __init__(self, fetch, addr):
+    def __init__(self, fetch, linkmap, addr):
         self.fetch = fetch
+        self.linkmap = linkmap
         self.addr = addr
 
     def name(self, linkmap):
@@ -157,17 +158,15 @@ class LinkMaps(object):
         return Strings.Iter.pattern.match(self.fetch(linkmap.name)).group(1).decode()
 
     def __iter__(self):
-        first = LinkMap(self.fetch(self.addr))
+        first = self.linkmap(self.addr)
         assert first.prev == 0
         addr, prev = first.next, self.addr
         while addr:
-            linkmap = LinkMap(self.fetch(addr))
+            linkmap = self.linkmap(addr)
             assert prev == linkmap.prev
             prev, addr = addr, linkmap.next
             if linkmap.name != first.name:
                 name = self.name(linkmap)
                 if name:
-                    yield tuple.__new__(type(linkmap),
-                                        (linkmap.addr, name,
-                                         Dyn(self.fetch(linkmap.dyn)),
-                                         linkmap.next, linkmap.prev))
+                    new = (linkmap.addr, name, linkmap.dyn, linkmap.next, linkmap.prev)
+                    yield tuple.__new__(type(linkmap), new)

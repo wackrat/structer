@@ -87,7 +87,23 @@ class Elf(object):
         """ ELF auxiliary vector, keyed by type """
         auxv = self.note(enums.CoreNote.Auxv)
         if auxv:
-            return dict((aux.type, aux.val) for aux in StructArray(auxv.desc, header.Auxv))
+            return dict((aux.type, aux.val)
+                        for aux in StructArray(auxv.desc, header.Auxv(**self.kwargs)))
+
+    @CacheAttr
+    def linkmap(self):
+        """ Dynamically loaded object """
+        return header.LinkMap(**self.kwargs)
+
+    @CacheAttr
+    def dyn(self):
+        """ ELF dynamic section """
+        return header.Dyn(**self.kwargs)
+
+    @CacheAttr
+    def debuginfo(self):
+        """ Shared object loading """
+        return header.DebugInfo(**self.kwargs)
 
 class Core(Elf):
     """
@@ -114,9 +130,10 @@ class Core(Elf):
     def filenote(self):
         """ Note with list of file mappings """
         note = self.note(enums.CoreNote.File)
-        if note:
-            note = header.FileNote(note.desc, **self.kwargs)
-            return header.FileMappings(note.count, note.Mem, **self.kwargs)
+        if not note:
+            return ()
+        note = header.FileNote(note.desc, **self.kwargs)
+        return header.FileMappings(note.count, note.Mem, **self.kwargs)
 
     def build_ids(self):
         """ Iterate over readonly executable filenote Elf headers """
@@ -124,17 +141,26 @@ class Core(Elf):
             if mapping.offset == 0:
                 seg = self.segs[self.addrindex[mapping.start]]
                 if seg.filesz > 0 and seg.flags == 5:
-                    head = self.fetch(seg.vaddr)
+                    assert mapping.start == seg.vaddr
+                    head = self.mem[seg.offset:][:seg.filesz]
                     yield mapping.name, seg.vaddr, Elf(head).build_id()
 
+    def fetch_linkmap(self, addr):
+        """ Instantiate linkmap at specified address """
+        return self.linkmap(self.fetch(addr))
+
     @CacheAttr
-    def link_map(self):
+    def linkmaps(self):
         """ Return chain of loaded objects from dynamic section Debug element """
         auxv = self.auxv
-        segs = StructArray(self.fetch(auxv[AUXVType.Phdr],
-                                      auxv[AUXVType.PHEnt] * auxv[AUXVType.PHNum]),
-                           self.phdr)
+        try:
+            segs = StructArray(self.fetch(auxv[AUXVType.Phdr],
+                                          auxv[AUXVType.PHEnt] * auxv[AUXVType.PHNum]),
+                               self.phdr)
+        except KeyError:
+            return ()
         dyn, = (seg for seg in segs if seg.type == PType.Dynamic)
-        debug, = (element for element in StructArray(self.fetch(dyn.vaddr, dyn.filesz), header.Dyn)
+        debug, = (element for element in StructArray(self.fetch(dyn.vaddr, dyn.filesz), self.dyn)
                   if element.tag == enums.DTag.Debug)
-        return header.LinkMaps(self.fetch, header.DebugInfo(self.fetch(debug.val)).map)
+        return header.LinkMaps(self.fetch, self.fetch_linkmap,
+                               self.debuginfo(self.fetch(debug.val)).map)
