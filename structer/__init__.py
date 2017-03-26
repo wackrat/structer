@@ -54,14 +54,10 @@ class NameBase(object):
     A keyword is recognized if a default value is provided in a class declaration.
     """
     def __init__(self, __mapping__=NULL, __member__=(), __iterable__=(), **kwargs):
-        self.__mapping__ = {**__mapping__, **kwargs}
+        self.__mapping__ = dict(**__mapping__)
+        self.__mapping__.update(**kwargs)
         self.__member__ = __member__
         super().__init__(__iterable__)
-
-    def __call__(self, **kwargs):
-        kwargs = {key: value for key, value in kwargs.items()
-                  if key in self.__mapping__ and kwargs[key] != self.__mapping__[key]}
-        return type(self)(self.__mapping__, self.__member__, self, **kwargs) if kwargs else self
 
     def __getattr__(self, name):
         try:
@@ -73,6 +69,10 @@ class NameSpace(NameBase, dict):
     """
     metaclass namespace
     """
+    def __call__(self, **kwargs):
+        kwargs = {key: value for key, value in kwargs.items()
+                  if key in self.__mapping__ and kwargs[key] != self.__mapping__[key]}
+        return type(self)(self.__mapping__, self.__member__, self, **kwargs) if kwargs else self
 
 class NameList(NameBase, list):
     """

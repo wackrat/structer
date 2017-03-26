@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 """
 Fetch Build IDs from ELF core
 In --list mode, print two names for each file,
@@ -11,8 +9,8 @@ The names can differ because of symbolic links.
 from argparse import ArgumentParser
 import struct
 
-from structer import memmap
-from structer.elf import Core, Elf
+from . import memmap
+from .elf import Core, Elf
 
 def hexify(bites):
     """ SHA1 as a string """
@@ -32,12 +30,9 @@ def main():
         if args.list:
             print("{:016x} {} {} ({})".format(addr, hexify(build_id), name, link_map.get(addr)))
         else:
-            elf_id = Elf(memmap(args.prefix + name)).build_id()
             try:
+                elf_id = Elf(memmap(args.prefix + name)).build_id()
                 assert  elf_id == build_id,\
-                "{}: {} != {}".format(name, hexify(elf_id), hexify(build_id))
-            except AssertionError as exc:
+                    "{}: {} != {}".format(name, hexify(elf_id), hexify(build_id))
+            except (AssertionError, FileNotFoundError) as exc:
                 print(exc)
-
-if __name__ == '__main__':
-    main()
