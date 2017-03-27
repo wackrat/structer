@@ -23,22 +23,22 @@ class Elf(object):
         elf.header = head
         return elf
 
+    def __getattr__(self, name):
+        cls = getattr(header, name)(**self.kwargs)
+        setattr(self, name, cls)
+        return cls
+
     @classmethod
     def elftype(cls, head):
         """ Choose class from header type field """
         return {enums.Type.Core : Core}.get(head.type, Elf)
 
     @CacheAttr
-    def phdr(self):
-        """ Program segment header class """
-        return header.Phdr(**self.kwargs)
-
-    @CacheAttr
     def segs(self):
         """ Sequence of program segment headers """
         head = self.header
         phdr = self.mem[head.phoff:][:head.phnum * head.phentsize]
-        return StructArray(phdr, self.phdr)
+        return StructArray(phdr, self.Phdr)
 
     @CacheAttr
     def addrindex(self):
@@ -62,7 +62,7 @@ class Elf(object):
     @CacheAttr
     def notetype(self):
         """ Generic ELF note """
-        return header.Note(**self.kwargs)
+        return self.Note
 
     def notes(self):
         """ elements within segments of type Note """
@@ -88,22 +88,7 @@ class Elf(object):
         auxv = self.note(enums.CoreNote.Auxv)
         if auxv:
             return dict((aux.type, aux.val)
-                        for aux in StructArray(auxv.desc, header.Auxv(**self.kwargs)))
-
-    @CacheAttr
-    def linkmap(self):
-        """ Dynamically loaded object """
-        return header.LinkMap(**self.kwargs)
-
-    @CacheAttr
-    def dyn(self):
-        """ ELF dynamic section """
-        return header.Dyn(**self.kwargs)
-
-    @CacheAttr
-    def debuginfo(self):
-        """ Shared object loading """
-        return header.DebugInfo(**self.kwargs)
+                        for aux in StructArray(auxv.desc, self.Auxv))
 
 class Core(Elf):
     """
@@ -124,7 +109,7 @@ class Core(Elf):
     @CacheAttr
     def notetype(self):
         """ ELF Note for Core """
-        return header.CoreNote(**self.kwargs)
+        return self.CoreNote
 
     @CacheAttr
     def filenote(self):
@@ -132,7 +117,7 @@ class Core(Elf):
         note = self.note(enums.CoreNote.File)
         if not note:
             return ()
-        note = header.FileNote(note.desc, **self.kwargs)
+        note = self.FileNote(note.desc)
         return header.FileMappings(note.count, note.Mem, **self.kwargs)
 
     def build_ids(self):
@@ -145,9 +130,9 @@ class Core(Elf):
                     head = self.mem[seg.offset:][:seg.filesz]
                     yield mapping.name, seg.vaddr, Elf(head).build_id()
 
-    def fetch_linkmap(self, addr):
+    def linkmap(self, addr):
         """ Instantiate linkmap at specified address """
-        return self.linkmap(self.fetch(addr))
+        return self.LinkMap(self.fetch(addr))
 
     @CacheAttr
     def linkmaps(self):
@@ -156,11 +141,11 @@ class Core(Elf):
         try:
             segs = StructArray(self.fetch(auxv[AUXVType.Phdr],
                                           auxv[AUXVType.PHEnt] * auxv[AUXVType.PHNum]),
-                               self.phdr)
+                               self.Phdr)
         except KeyError:
             return ()
         dyn, = (seg for seg in segs if seg.type == PType.Dynamic)
-        debug, = (element for element in StructArray(self.fetch(dyn.vaddr, dyn.filesz), self.dyn)
+        debug, = (element for element in StructArray(self.fetch(dyn.vaddr, dyn.filesz), self.Dyn)
                   if element.tag == enums.DTag.Debug)
-        return header.LinkMaps(self.fetch, self.fetch_linkmap,
-                               self.debuginfo(self.fetch(debug.val)).map)
+        return header.LinkMaps(self.fetch, self.linkmap,
+                               self.DebugInfo(self.fetch(debug.val)).map)
