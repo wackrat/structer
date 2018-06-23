@@ -2,6 +2,8 @@
 Extensible Link Format represented by named.Struct subclasses
 """
 
+import re
+import struct
 from .. import CacheAttr
 from ..named import StructArray, VarStructArray
 from ..intervals import Intervals
@@ -82,6 +84,24 @@ class Elf(object):
         """ Contents of GNUNote.Build_ID note """
         return self.note(enums.GNUNote.Build_ID).desc
 
+    def find(self, pattern):
+        """
+        Generator for re search on seg contents
+        Does not handle hits which cross seg boundaries
+        """
+        for seg in self.segs:
+            if seg.type == PType.Load:
+                for hit in pattern.finditer(self.fetch(seg.vaddr)):
+                    yield seg.vaddr + hit.start()
+
+    def findbytes(self, bytes):
+        """ Generator to locate specified bytes """
+        return self.find(re.compile(re.escape(bytes)))
+
+    def findwords(self, *words, fmt="Q"):
+        """ Generator to locate specified word sequence """
+        return self.find(re.compile(b''.join(re.escape(struct.pack(fmt, word)) for word in words)))
+
     @CacheAttr
     def auxv(self):
         """ ELF auxiliary vector, keyed by type """
@@ -145,7 +165,10 @@ class Core(Elf):
         except KeyError:
             return ()
         dyn, = (seg for seg in segs if seg.type == PType.Dynamic)
-        debug, = (element for element in StructArray(self.fetch(dyn.vaddr, dyn.filesz), self.Dyn)
+        phdr, = (seg for seg in segs if seg.type == PType.Phdr)
+        delta = auxv[AUXVType.Phdr] - phdr.vaddr
+        debug, = (element for element in StructArray(self.fetch(dyn.vaddr + delta,
+                                                                dyn.filesz), self.Dyn)
                   if element.tag == enums.DTag.Debug)
         return header.LinkMaps(self.fetch, self.linkmap,
                                self.DebugInfo(self.fetch(debug.val)).map)

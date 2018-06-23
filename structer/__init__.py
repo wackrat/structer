@@ -106,7 +106,8 @@ def base_keywords(bases):
 
 class Meta(type):
     """
-    metaclass for keyword-specified classes which replicate variants
+    metaclass for keyword-specified classes which derive variants
+    The __call__ method can derive a subclass with different keyword values.
     """
     @classmethod
     def __prepare__(mcs, name, bases, **kwargs):
@@ -122,8 +123,8 @@ class Meta(type):
     def __call__(cls, *args, **kwargs):
         namespace = cls.__namespace__(**kwargs)
         if namespace is not cls.__namespace__:
-            cls = type(cls)(cls.__name__, cls.__bases__, namespace, **kwargs)
+            cls = type(cls)(cls.__name__, (cls,) + cls.__bases__, namespace, **kwargs)
         return super().__call__(*args) if args else cls
 
     def __getattr__(cls, name):
-        return getattr(cls.__namespace__, name)
+        return cls.__namespace__.__getattr__(name)

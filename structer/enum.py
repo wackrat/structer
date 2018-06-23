@@ -58,7 +58,7 @@ class MetaEnum(Meta):
         new = super().__call__(*args, **kwargs)
         if args:
             if new not in cls.__namespace__.__member__:
-                raise ValueError("%r is not a %s value" % (new, cls.__name__))
+                raise ValueError("%s is not a %s value" % (new, cls.__name__))
         return new
 
     def __getattr__(cls, name):
