@@ -44,7 +44,6 @@ class Type(Enum, Int(length=1)):
 
 class Machine(Enum, Int(length=1)):
     """ ELF machine """
-    # pylint: disable=invalid-name
     M32, Sparc, I386, M68K, M88K = range(1, 6)
     I860, MIPS, S370, MIPS_RS3_LE = range(7, 11)
     PARISC = 15

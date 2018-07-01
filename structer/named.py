@@ -111,13 +111,17 @@ class Struct(tuple, metaclass=MetaStruct, byteorder=0):
 
     __len__ = MetaStruct.__len__
 
+    def __getattr__(self, name):
+        return self.__namespace__.__getattr__(name)
+
 class VarStruct(Struct):
     """
     Struct with callable elements of variable size
     """
     @classmethod
     def __new_iter__(cls, mem, offset):
-        return super().__new__(cls, mem, offset)
+        """ Use tuple.__iter__ to allow custom __iter__ method """
+        return tuple.__iter__(super().__new__(cls, mem, offset))
     @classmethod
     def __init_format__(cls):
         return cls.__struct__.format.decode()
@@ -144,91 +148,45 @@ class StructArray(object):
     """
     def __init__(self, mem, cls):
         self.mem = mem
-        self.nbytes = mem.nbytes
         self.cls = cls
-        self.itemsize = len(cls)
-
-    @CacheAttr
-    def length(self):
-        """ Element count """
-        return self.nbytes // self.itemsize
-
-    def __len__(self): # pylint: disable=invalid-length-returned
-        return self.length
-
-    def offset(self, index):
-        """ Scale index to byte offset """
-        offset = index * self.itemsize
-        if offset < 0 or offset >= self.nbytes:
-            raise IndexError
-        return offset
 
     def fetch(self, offset):
         """ Instantiate at specified offset """
         return self.cls(self.mem, offset)
 
-    def getitem(self, index):
-        """ Fetch from scaled index """
-        if index < 0:
-            index += self.length
-        return self.fetch(self.offset(index))
+    @CacheAttr
+    def offset(self):
+        """ Scale index to byte offset """
+        return range(0, self.mem.nbytes, len(self.cls))
+
+    def __len__(self):
+        return len(self.offset)
 
     def __getitem__(self, index):
         if isinstance(index, slice):
-            return self.getslice(index)
+            return tuple(self)[index]
         else:
-            return self.getitem(index)
-
-    def getslice(self, indices):
-        """ Return a generator over the slice range """
-        for index in range(*indices.indices(self.length)):
-            yield self.getitem(index)
+            return self.fetch(self.offset[index])
 
     def __iter__(self):
         offset = 0
-        while offset < self.nbytes:
+        while offset < self.mem.nbytes:
             item = self.fetch(offset)
-            offset += len(item)
             yield item
+            offset += len(item)
+
+def offsets(sequence, offset=0):
+    """ Offset of each element of a contiguous sequence """
+    for item in sequence:
+        yield offset
+        offset += len(item)
 
 class VarStructArray(StructArray):
     """
     Contiguous span of named.VarStruct objects in a memoryview
-    Direct access is provided by an offset cache,
-    which is populated on demand by the iterator
+    Direct access is provided by an offset cache.
     """
-    def __init__(self, mem, cls):
-        super().__init__(mem, cls)
-        self.offsets = []
-        self.tail = 0
-
     @CacheAttr
-    def length(self):
-        """ Determine element count by populating offset cache """
-        while self.tail < self.nbytes:
-            next(self)
-        return len(self.offsets)
-
-    def offset(self, index):
-        """ Fetch accumulated offset from cache; fill cache on demand """
-        if index < 0:
-            raise IndexError
-        try:
-            return self.offsets[index]
-        except IndexError:
-            while self.tail < self.nbytes:
-                next(self)
-                if len(self.offsets) > index:
-                    return self.offsets[index]
-            raise IndexError
-
-    def __next__(self):
-        offset = self.tail
-        if offset >= self.nbytes:
-            raise StopIteration
-        item = self.fetch(offset)
-        size = len(item)
-        assert size > 0
-        self.offsets.append(offset)
-        self.tail += size
-        return item
+    def offset(self):
+        """ Offset cache """
+        return tuple(offsets(self))

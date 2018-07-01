@@ -7,8 +7,6 @@ import struct
 
 from . import named
 
-# pylint: disable=undefined-variable,pointless-statement
-
 class Interval(named.Tuple):
     """
     Three integers or integer sequences defining spans and values

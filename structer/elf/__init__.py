@@ -7,6 +7,7 @@ import struct
 from .. import CacheAttr
 from ..named import StructArray, VarStructArray
 from ..intervals import Intervals
+from ..data import Bytes
 from . import enums, header
 from .enums import PType, AUXVType
 
@@ -17,10 +18,10 @@ class Elf(object):
     def __new__(cls, mem):
         ident = header.Ident(mem)
         kwargs = dict(byteorder=ident.byteorder, wordsize=ident.wordsize)
-        # pylint: disable=unexpected-keyword-arg
         head = header.Header(mem, **kwargs)
         elf = super().__new__(cls.elftype(head))
         elf.mem = mem
+        kwargs.update(fetch=elf.fetch)
         elf.kwargs = kwargs
         elf.header = head
         return elf
@@ -82,7 +83,7 @@ class Elf(object):
 
     def build_id(self):
         """ Contents of GNUNote.Build_ID note """
-        return self.note(enums.GNUNote.Build_ID).desc
+        return Bytes(self.note(enums.GNUNote.Build_ID).desc)
 
     def find(self, pattern):
         """
@@ -94,21 +95,13 @@ class Elf(object):
                 for hit in pattern.finditer(self.fetch(seg.vaddr)):
                     yield seg.vaddr + hit.start()
 
-    def findbytes(self, bytes):
+    def findbytes(self, bites):
         """ Generator to locate specified bytes """
-        return self.find(re.compile(re.escape(bytes)))
+        return self.find(re.compile(re.escape(bites)))
 
     def findwords(self, *words, fmt="Q"):
         """ Generator to locate specified word sequence """
         return self.find(re.compile(b''.join(re.escape(struct.pack(fmt, word)) for word in words)))
-
-    @CacheAttr
-    def auxv(self):
-        """ ELF auxiliary vector, keyed by type """
-        auxv = self.note(enums.CoreNote.Auxv)
-        if auxv:
-            return dict((aux.type, aux.val)
-                        for aux in StructArray(auxv.desc, self.Auxv))
 
 class Core(Elf):
     """
@@ -135,10 +128,14 @@ class Core(Elf):
     def filenote(self):
         """ Note with list of file mappings """
         note = self.note(enums.CoreNote.File)
-        if not note:
-            return ()
-        note = self.FileNote(note.desc)
-        return header.FileMappings(note.count, note.Mem, **self.kwargs)
+        return self.FileNote(note.desc)
+
+    @CacheAttr
+    def auxv(self):
+        """ ELF auxiliary vector, keyed by type """
+        auxv = self.note(enums.CoreNote.Auxv)
+        return dict((aux.type, aux.val)
+                    for aux in StructArray(auxv.desc, self.Auxv))
 
     def build_ids(self):
         """ Iterate over readonly executable filenote Elf headers """
@@ -150,25 +147,16 @@ class Core(Elf):
                     head = self.mem[seg.offset:][:seg.filesz]
                     yield mapping.name, seg.vaddr, Elf(head).build_id()
 
-    def linkmap(self, addr):
-        """ Instantiate linkmap at specified address """
-        return self.LinkMap(self.fetch(addr))
-
     @CacheAttr
-    def linkmaps(self):
+    def linkmap(self):
         """ Return chain of loaded objects from dynamic section Debug element """
         auxv = self.auxv
-        try:
-            segs = StructArray(self.fetch(auxv[AUXVType.Phdr],
-                                          auxv[AUXVType.PHEnt] * auxv[AUXVType.PHNum]),
-                               self.Phdr)
-        except KeyError:
-            return ()
+        segs = StructArray(self.fetch(auxv[AUXVType.Phdr],
+                                      auxv[AUXVType.PHEnt] * auxv[AUXVType.PHNum]),
+                           self.Phdr)
         dyn, = (seg for seg in segs if seg.type == PType.Dynamic)
         phdr, = (seg for seg in segs if seg.type == PType.Phdr)
         delta = auxv[AUXVType.Phdr] - phdr.vaddr
-        debug, = (element for element in StructArray(self.fetch(dyn.vaddr + delta,
-                                                                dyn.filesz), self.Dyn)
-                  if element.tag == enums.DTag.Debug)
-        return header.LinkMaps(self.fetch, self.linkmap,
-                               self.DebugInfo(self.fetch(debug.val)).map)
+        dyns = StructArray(self.fetch(dyn.vaddr + delta, dyn.filesz), self.Dyn)
+        debug, = (element for element in dyns if element.tag == enums.DTag.Debug)
+        return self.LinkMap(self.fetch(self.DebugInfo(self.fetch(debug.val)).map))

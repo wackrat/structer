@@ -7,15 +7,9 @@ The names can differ because of symbolic links.
 """
 
 from argparse import ArgumentParser
-import struct
 
 from . import memmap
 from .elf import Core, Elf
-
-def hexify(bites):
-    """ SHA1 as a string """
-    count = len(bites) // 4
-    return ("{:08x}"*count).format(*struct.Struct(">{}I".format(count)).unpack(bites))
 
 def main():
     """ Fetch Build IDs in ELF core """
@@ -25,14 +19,13 @@ def main():
     parser.add_argument("file")
     args = parser.parse_args()
     core = Core(memmap(args.file))
-    link_map = {linkmap.addr: linkmap.name for linkmap in core.linkmaps}
+    link_map = {linkmap.addr: linkmap.name for linkmap in core.linkmap}
     for name, addr, build_id in core.build_ids():
         if args.list:
-            print("{:016x} {} {} ({})".format(addr, hexify(build_id), name, link_map.get(addr)))
+            print("{:016x} {} {} ({})".format(addr, build_id, name, link_map.get(addr)))
         else:
             try:
                 elf_id = Elf(memmap(args.prefix + name)).build_id()
-                assert  elf_id == build_id,\
-                    "{}: {} != {}".format(name, hexify(elf_id), hexify(build_id))
+                assert  elf_id == build_id, "{}: {} != {}".format(name, elf_id, build_id)
             except (AssertionError, FileNotFoundError) as exc:
-                print(exc)
+                print(build_id, exc)

@@ -2,8 +2,9 @@
 ELF file header
 """
 
+from .. import CacheAttr
 from ..named import Struct, VarStruct, StructArray, Tuple
-from ..data import Bytes, Int, Long, Strings
+from ..data import Bytes, Int, Long, String, Strings, Tail
 from . import enums
 
 class Ident(Struct):
@@ -90,8 +91,6 @@ class Span(Struct):
     """
     start, end, offset = 3*(Long,)
 
-# pylint: disable=undefined-variable,pointless-statement
-
 class FileMapping(Tuple):
     """ One element of a FileNote """
     name, start, end, offset
@@ -100,22 +99,18 @@ class FileNote(VarStruct):
     """
     Note containing file mappings in ELF core
     """
-    count, align = Long, Long
+    count, align, tail = Long, Long, Tail
 
-    class Mem(Bytes):
-        """ The remaining space in this note """
-        def __call__(self, mem, offset):
-            return mem[offset:]
+    @CacheAttr
+    def spans(self):
+        """ Sequence of spans """
+        span = Span(byteorder=self.byteorder, wordsize=self.count.wordsize)
+        return StructArray(self.tail[:self.count*len(span)], span)
 
-class FileMappings(object):
-    """
-    Iterable representing a FileNote
-    """
-    def __init__(self, count, mem, **kwargs):
-        span = Span(**kwargs)
-        length = count * len(span)
-        self.spans = StructArray(mem[:length], span)
-        self.names = Strings(0)(mem, length)
+    @CacheAttr
+    def names(self):
+        """ Null terminated strings """
+        return Strings(0)(self.tail, len(self.spans.mem))
 
     def __iter__(self):
         name = iter(self.names)
@@ -142,31 +137,19 @@ class DebugInfo(Struct):
     state = enums.DebugState
     ldbase = Long
 
-class LinkMap(Struct):
+class LinkMap(VarStruct, fetch=None):
     """ Dynamically loaded object """
-    addr, name, dyn, next, prev = 5*(Long,)
-
-class LinkMaps(object):
-    """ Iterator for chain of LinkMap elements """
-    def __init__(self, fetch, linkmap, addr):
-        self.fetch = fetch
-        self.linkmap = linkmap
-        self.addr = addr
-
-    def name(self, linkmap):
-        """ Fetch null terminated string from specified LinkMap """
-        return Strings.Iter.pattern.match(self.fetch(linkmap.name)).group(1).decode()
-
+    addr = Long
+    class name(Long, fetch=None):
+        """ Address of null terminated string """
+        def __call__(self, mem, offset):
+            try:
+                return str(String(self.fetch(self)))
+            except KeyError:
+                return ''
+    dyn, next, prev = 3*(Long,)
     def __iter__(self):
-        first = self.linkmap(self.addr)
-        assert first.prev == 0
-        addr, prev = first.next, self.addr
-        while addr:
-            linkmap = self.linkmap(addr)
-            assert prev == linkmap.prev
-            prev, addr = addr, linkmap.next
-            if linkmap.name != first.name:
-                name = self.name(linkmap)
-                if name:
-                    new = (linkmap.addr, name, linkmap.dyn, linkmap.next, linkmap.prev)
-                    yield tuple.__new__(type(linkmap), new)
+        while self.next:
+            self = type(self)(self.fetch(self.next))
+            if self.name:
+                yield self

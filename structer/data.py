@@ -18,10 +18,26 @@ class Data(metaclass=Meta, length=0):
     def __struct_format__(self):
         return '{}s'.format(self.__namespace__.length)
 
+    def __getattr__(self, name):
+        return self.__namespace__.__getattr__(name)
+
 class Bytes(bytes, Data):
     """
     bytes data element with length keyword, defaulting to zero
+    Render in hexadecimal
     """
+    def __str__(self):
+        return (len(self)*"{:02x}").format(*self)
+    def __repr__(self):
+        return str(self)
+
+class String(Bytes):
+    """
+    Bytes subclass for null terminated strings
+    """
+    pattern = re.compile(b'^[^\0]*')
+    def __str__(self):
+        return self.pattern.match(self).group().decode()
 
 def signer(cls, char):
     """
@@ -69,3 +85,10 @@ class Strings(Bytes):
 
     def __call__(self, mem, offset):
         return self.Iter(mem, offset)
+
+class Tail(Bytes):
+    """
+    The remaining space in this slice
+    """
+    def __call__(self, mem, offset):
+        return mem[offset:]
