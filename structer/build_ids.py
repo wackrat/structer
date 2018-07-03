@@ -19,13 +19,13 @@ def main():
     parser.add_argument("file")
     args = parser.parse_args()
     core = Core(memmap(args.file))
-    link_map = {linkmap.addr: linkmap.name for linkmap in core.linkmap}
+    linkmap = {linkmap.addr: linkmap.name for linkmap in core.linkmap}
     for name, addr, build_id in core.build_ids():
         if args.list:
-            print("{:016x} {} {} ({})".format(addr, build_id, name, link_map.get(addr)))
+            print("{:016x} {} {} ({})".format(addr, build_id, name, linkmap.get(addr)))
         else:
             try:
-                elf_id = Elf(memmap(args.prefix + name)).build_id()
+                elf_id = Elf(memmap(args.prefix + name), name).build_id()
                 assert  elf_id == build_id, "{}: {} != {}".format(name, elf_id, build_id)
             except (AssertionError, FileNotFoundError) as exc:
                 print(build_id, exc)

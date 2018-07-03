@@ -5,3 +5,5 @@ The structer package provides metaclasses which allow concise specification of c
 The first application of this code, build_ids.py,
 extracts build ID values from a Linux core file which includes a file note that lists the mappings,
 and which includes the first block of each shared library in the link map, and the executable.
+
+The cpio module handles CPIO files with magic number 070701 or 070702.

@@ -68,14 +68,14 @@ class StructDict(NameSpace):
 class StructAttr(object):
     """
     Return element at specified index when accessed from an instance
-    Block access when accessed from a class, to defer to __getattr__
+    Return element type from namespace when accessed from a class
     """
     def __init__(self, index):
         self.index = index
 
     def __get__(self, instance, owner):
         if instance is None:
-            raise AttributeError
+            return owner.__namespace__.__member__[self.index]
         else:
             return instance[self.index]
 

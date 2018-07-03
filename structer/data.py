@@ -7,12 +7,14 @@ Int subclasses are independent of elf.enums.WordSize
 """
 
 import re
+from datetime import datetime
 
 from . import Meta, ClassAttr
 
 class Data(metaclass=Meta, length=0):
     """
     Base class for generating class variants by keyword
+    Keyword values are provided as attributes if otherwise absent.
     """
     @ClassAttr
     def __struct_format__(self):
@@ -28,6 +30,7 @@ class Bytes(bytes, Data):
     """
     def __str__(self):
         return (len(self)*"{:02x}").format(*self)
+
     def __repr__(self):
         return str(self)
 
@@ -36,6 +39,7 @@ class String(Bytes):
     Bytes subclass for null terminated strings
     """
     pattern = re.compile(b'^[^\0]*')
+
     def __str__(self):
         return self.pattern.match(self).group().decode()
 
@@ -43,16 +47,35 @@ def signer(cls, char):
     """
     Use upper case for unsigned format character
     """
-    return char if cls.__namespace__.signed else char.upper()
+    return char if cls.signed else char.upper()
 
-class Int(int, Data, signed=False):
+class Int(int, Data, signed=False, base=None):
     """
     int data element with 1, 2, 4, or 8 bytes, defaulting to 1
-    the length keyword value is the base two log of the byte count
+    the length keyword value is the base two log of the byte count.
+    the base keyword changes the meaning of the length keyword,
+    specifying the length of a bytes object sent to the int constructor
     """
+    def __new__(cls, value):
+        if cls.base is None:
+            return super().__new__(cls, value)
+        else:
+            return super().__new__(cls, value, base=cls.base)
+
     @ClassAttr
     def __struct_format__(self):
-        return signer(self, "bhiq"[self.__namespace__.length])
+        length = self.length
+        if self.base is None:
+            return signer(self, "bhiq"[length])
+        else:
+            return '{}s'.format(length)
+
+    def __len__(self):
+        length = self.length
+        if self.base is None:
+            return 1 << length
+        else:
+            return length
 
 class Long(Int, wordsize=0):
     """
@@ -62,6 +85,28 @@ class Long(Int, wordsize=0):
     @ClassAttr
     def __struct_format__(self):
         return signer(self, "niq"[self.__namespace__.wordsize])
+
+class PString(Int):
+    """
+    String with prefix length
+    """
+    def __call__(self, mem, offset):
+        return String(mem[offset:][:self])
+
+def pad(offset, align):
+    """
+    Number of bytes to add to offset to align it
+    """
+    return (align - (offset % align)) % align
+
+class Pad(Bytes, align=1):
+    """
+    slice of nulls to round the offset to the specfied alignment
+    """
+    def __call__(self, mem, offset):
+        padding = mem[offset:][:pad(offset, self.align)]
+        assert padding == len(padding) * b'\0'
+        return padding
 
 class Strings(Bytes):
     """
@@ -85,6 +130,13 @@ class Strings(Bytes):
 
     def __call__(self, mem, offset):
         return self.Iter(mem, offset)
+
+class MTime(Int):
+    """
+    Return datetime decoded from Int
+    """
+    def __new__(cls, value):
+        return datetime.utcfromtimestamp(int(super().__new__(cls, value)))
 
 class Tail(Bytes):
     """

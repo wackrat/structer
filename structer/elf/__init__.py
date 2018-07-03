@@ -15,12 +15,13 @@ class Elf(object):
     """
     Extensible Link Format
     """
-    def __new__(cls, mem):
+    def __new__(cls, mem, name=None):
         ident = header.Ident(mem)
         kwargs = dict(byteorder=ident.byteorder, wordsize=ident.wordsize)
         head = header.Header(mem, **kwargs)
         elf = super().__new__(cls.elftype(head))
         elf.mem = mem
+        elf.name = name
         kwargs.update(fetch=elf.fetch)
         elf.kwargs = kwargs
         elf.header = head
@@ -107,7 +108,7 @@ class Core(Elf):
     """
     ELF crash dump
     """
-    def __new__(cls, mem):
+    def __new__(cls, mem, name=None):
         """ Validate type field """
         elf = super().__new__(cls, mem)
         assert cls.elftype(elf.header) is cls, "Not a core"
@@ -159,4 +160,6 @@ class Core(Elf):
         delta = auxv[AUXVType.Phdr] - phdr.vaddr
         dyns = StructArray(self.fetch(dyn.vaddr + delta, dyn.filesz), self.Dyn)
         debug, = (element for element in dyns if element.tag == enums.DTag.Debug)
-        return self.LinkMap(self.fetch(self.DebugInfo(self.fetch(debug.val)).map))
+        linkmap = self.LinkMap(self.fetch(self.DebugInfo(self.fetch(debug.val)).map))
+        assert linkmap.addr + dyn.vaddr == linkmap.dyn
+        return linkmap
