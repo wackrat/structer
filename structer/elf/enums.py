@@ -64,27 +64,21 @@ class PType(Enum, Int(length=2)):
     LOOS = 0x60000000
     GNU_EH_Frame, GNU_Stack, GNU_Relro = range(0x6474e550, 0x6474e553)
 
-class GNUNote(Enum, Int(length=2)):
-    """ ELF note type """
-    ABI_Tag, HWCap, Build_ID, Gold_Version = range(1, 5)
+class SType(Enum, Int(length=2)):
+    """ Elf section type """
+    Null, Prog, Symtab, Strtab, Rela, Hash, Dynamic = range(0, 7)
+    Note, Nobits, Rel, Shlib, Dynsym = range(7, 12)
+    Init, Fini, Preinit, Group, Shndx = range(14, 19)
+    GNUAttributes, GNUHash, GNULiblist, GNUChecksum = range(0x6ffffff5, 0x6ffffff9)
+    GNUverdef, GNUverneed, GNUversym = range(0x6ffffffd, 0x70000000)
 
-class CoreNote(Enum, Int(length=2)):
-    """ ELF core note type """
-    PRStatus, FPRegset, PRPSInfo, PRXreg = range(1, 5)
-    Platform, Auxv, GWindows, ASRS = range(5, 9)
-    PStatus = 10
-    PSInfo, PRCred, UTSName, LWPStatus, LWPSInfo = range(13, 18)
-    PRFPXreg, SigInfo, File, PRXFPreg = 20, 0x53494749, 0x46494c45, 0x46e62b7f
-    PPC_VMX, PPC_SPE, PPC_VSX = range(0x100, 0x103)
-    I386_TLS, I386_IOPerm, IX86_XState = range(0x200, 0x203)
-    S390_High_GPRS, S390_Timer, S390_TODCmp, S390_TODPreg, S390_CTRS = range(0x300, 0x305)
-    S390_Prefix, S390_Last_Break, S390_System_Call, S390_TDB = range(0x305, 0x309)
-    ARM_VFP, ARM_TLS, ARM_HW_Break, ARM_HW_Watch = range(0x400, 0x404)
+class Note(Enum, Int(length=2)):
+    """ Elf note base class """
+    def __eq__(self, other):
+        return repr(self) == repr(other)
 
-class NoteName(Enum, Bytes):
-    """ Enumeration of NoteName values """
-    CORE, GNU, LINUX = [name.ljust((len(name) + 4) & ~3, b'\0')
-                        for name in (b'CORE', b'GNU', b'LINUX')]
+    def __hash__(self):
+        return hash(repr(self))
 
 class DTag(Enum, Long):
     """ Tag values in ELF dynamic section """

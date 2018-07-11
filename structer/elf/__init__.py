@@ -4,12 +4,17 @@ Extensible Link Format represented by named.Struct subclasses
 
 import re
 import struct
-from .. import CacheAttr
+from .. import CacheAttr, MultiDict
 from ..named import StructArray, VarStructArray
 from ..intervals import Intervals
 from ..data import Bytes
-from . import enums, header
-from .enums import PType, AUXVType
+from . import header
+from .enums import PType, AUXVType, Type, DTag
+from .notes import GNU, CORE
+
+def elftype(head):
+    """ Choose class from header type field """
+    return {Type.Core : Core}.get(head.type, Elf)
 
 class Elf(object):
     """
@@ -19,7 +24,7 @@ class Elf(object):
         ident = header.Ident(mem)
         kwargs = dict(byteorder=ident.byteorder, wordsize=ident.wordsize)
         head = header.Header(mem, **kwargs)
-        elf = super().__new__(cls.elftype(head))
+        elf = super().__new__(elftype(head))
         elf.mem = mem
         elf.name = name
         kwargs.update(fetch=elf.fetch)
@@ -32,17 +37,19 @@ class Elf(object):
         setattr(self, name, cls)
         return cls
 
-    @classmethod
-    def elftype(cls, head):
-        """ Choose class from header type field """
-        return {enums.Type.Core : Core}.get(head.type, Elf)
-
     @CacheAttr
     def segs(self):
         """ Sequence of program segment headers """
         head = self.header
         phdr = self.mem[head.phoff:][:head.phnum * head.phentsize]
         return StructArray(phdr, self.Phdr)
+
+    @CacheAttr
+    def sects(self):
+        """ Sequence of section headers """
+        head = self.header
+        shdr = self.mem[head.shoff:][:head.shnum * head.shentsize]
+        return StructArray(shdr, self.Shdr)
 
     @CacheAttr
     def addrindex(self):
@@ -63,28 +70,29 @@ class Elf(object):
             raise KeyError
         return self.mem[seg.offset + offset:][:size]
 
-    @CacheAttr
-    def notetype(self):
-        """ Generic ELF note """
-        return self.Note
-
-    def notes(self):
+    def notes(self, segs):
         """ elements within segments of type Note """
-        for seg in self.segs:
-            if seg.type == PType.Note:
+        for seg in segs:
+            if seg.type == seg.type.Note:
                 notes = self.mem[seg.offset:][:seg.filesz]
-                for note in VarStructArray(notes, self.notetype):
-                    yield note
+                for note in VarStructArray(notes, self.Note):
+                    yield note()
 
-    def note(self, ntype):
-        """ First note matching specified type """
-        for note in self.notes():
-            if note.type == ntype:
-                return note
+    @CacheAttr
+    def note(self):
+        """
+        Notes keyed by type
+        Work around malformatted Elf objects.
+        """
+        try:
+            return MultiDict(self.notes(self.segs))
+        except AttributeError:
+            return MultiDict(self.notes(self.sects))
 
     def build_id(self):
         """ Contents of GNUNote.Build_ID note """
-        return Bytes(self.note(enums.GNUNote.Build_ID).desc)
+        mem, = self.note[GNU.Build_ID]
+        return Bytes(mem)
 
     def find(self, pattern):
         """
@@ -111,7 +119,7 @@ class Core(Elf):
     def __new__(cls, mem, name=None):
         """ Validate type field """
         elf = super().__new__(cls, mem)
-        assert cls.elftype(elf.header) is cls, "Not a core"
+        assert elftype(elf.header) is cls, "Not a core"
         return elf
 
     def size(self):
@@ -121,22 +129,17 @@ class Core(Elf):
         return last.offset + last.filesz
 
     @CacheAttr
-    def notetype(self):
-        """ ELF Note for Core """
-        return self.CoreNote
-
-    @CacheAttr
     def filenote(self):
         """ Note with list of file mappings """
-        note = self.note(enums.CoreNote.File)
-        return self.FileNote(note.desc)
+        note, = self.note[CORE.File]
+        return self.FileNote(note)
 
     @CacheAttr
     def auxv(self):
         """ ELF auxiliary vector, keyed by type """
-        auxv = self.note(enums.CoreNote.Auxv)
+        auxv, = self.note[CORE.Auxv]
         return dict((aux.type, aux.val)
-                    for aux in StructArray(auxv.desc, self.Auxv))
+                    for aux in StructArray(auxv, self.Auxv))
 
     def build_ids(self):
         """ Iterate over readonly executable filenote Elf headers """
@@ -159,7 +162,7 @@ class Core(Elf):
         phdr, = (seg for seg in segs if seg.type == PType.Phdr)
         delta = auxv[AUXVType.Phdr] - phdr.vaddr
         dyns = StructArray(self.fetch(dyn.vaddr + delta, dyn.filesz), self.Dyn)
-        debug, = (element for element in dyns if element.tag == enums.DTag.Debug)
+        debug, = (element for element in dyns if element.tag == DTag.Debug)
         linkmap = self.LinkMap(self.fetch(self.DebugInfo(self.fetch(debug.val)).map))
         assert linkmap.addr + dyn.vaddr == linkmap.dyn
         return linkmap

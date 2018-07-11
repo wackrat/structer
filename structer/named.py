@@ -94,6 +94,7 @@ class MetaStruct(Meta):
     def __init__(cls, name, bases, namespace, **kwargs):
         struct_format = "@<>"[namespace.byteorder] + ''.join(
             init.__struct_format__ for init in namespace.__member__)
+        cls.__len__ = type(cls).__len__
         cls.__struct__ = struct.Struct(struct_format)
         cls.__struct_format__ = '{}s'.format(len(cls))
         for key, value in namespace.__member__.__mapping__.items():
@@ -108,11 +109,6 @@ class Struct(tuple, metaclass=MetaStruct, byteorder=0):
         zipped = zip(cls.__namespace__.__member__,
                      cls.__struct__.unpack_from(mem, offset))
         return super().__new__(cls, (init(value) for (init, value) in zipped))
-
-    __len__ = MetaStruct.__len__
-
-    def __getattr__(self, name):
-        return self.__namespace__.__getattr__(name)
 
 class VarStruct(Struct):
     """

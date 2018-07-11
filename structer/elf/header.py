@@ -2,10 +2,12 @@
 ELF file header
 """
 
-from .. import CacheAttr
+from .. import CacheAttr, data
 from ..named import Struct, VarStruct, StructArray, Tuple
-from ..data import Bytes, Int, Long, String, Strings, Tail
-from . import enums
+from ..data import Long, String, Pad
+from . import enums, notes
+
+Int1, Int2, Int3 = (data.Int(length=length) for length in (1, 2, 3))
 
 class Ident(Struct):
     """
@@ -16,8 +18,8 @@ class Ident(Struct):
     byteorder = enums.ByteOrder
     version = enums.Version
     osabi = enums.OSABI
-    abiversion = Int
-    padding = Bytes(length=7)
+    abiversion = data.Int
+    padding = data.Nulls(length=7)
 
 class Header(Struct):
     """
@@ -28,9 +30,9 @@ class Header(Struct):
     machine = enums.Machine
     version = enums.Version(length=2)
     entry, phoff, shoff = 3*(Long,)
-    flags = Int(length=2)
-    ehsize, phentsize, phnum = 3*(Int(length=1),)
-    shentsize, shnum, shstrndx = 3*(Int(length=1),)
+    flags = Int2
+    ehsize, phentsize, phnum = 3*(Int1,)
+    shentsize, shnum, shstrndx = 3*(Int1,)
 
 class Phdr(object):
     """
@@ -39,51 +41,39 @@ class Phdr(object):
     class Phdr32(Struct):
         """ 32 bit program segment header """
         type = enums.PType
-        offset, vaddr, paddr, filesz, memsz, flags, align = 7*(Int(length=2),)
+        offset, vaddr, paddr, filesz, memsz, flags, align = 7*(Int2,)
 
     class Phdr64(Struct):
         """ 64 bit program segment header """
         type = enums.PType
-        flags = Int(length=2)
-        offset, vaddr, paddr, filesz, memsz, align = 6*(Int(length=3),)
+        flags = Int2
+        offset, vaddr, paddr, filesz, memsz, align = 6*(Int3,)
 
     def __new__(cls, **kwargs):
         """ Choose the class indexed by the wordsize """
         return (None, cls.Phdr32, cls.Phdr64)[kwargs['wordsize']](**kwargs)
 
-class PaddedBytes(Int(length=2)):
+class Shdr(Struct):
     """
-    byte range of specified length, aligned to 32 bit boundary
+    ELF section header
     """
-    def __init__(self, size):
-        super().__init__()
-        self.size = (size + 3) & ~3
-
-    def __call__(self, mem, offset):
-        return mem[offset:][:self.size]
-
-class NoteName(PaddedBytes):
-    """
-    name of a note, stored as PaddedBytes
-    """
-    def __call__(self, mem, offset):
-        return enums.NoteName(super().__call__(mem, offset))
-
-class CoreNote(VarStruct):
-    """
-    Core Note section
-    """
-    name = NoteName
-    desc = PaddedBytes
-    type = enums.CoreNote
+    name = Int2
+    type = enums.SType
+    flags, addr, offset, filesz = 4*(Long,)
+    link, info, = 2*(Int2,)
+    align, entsize = 2*(Long, )
 
 class Note(VarStruct):
     """
-    Elf Note section
+    Elf Note
     """
-    name = NoteName
-    desc = PaddedBytes
-    type = enums.GNUNote
+    name = data.PString(length=2)
+    namepad = Pad(align=4)
+    payload = data.Payload
+    paypad = Pad(align=4)
+    notetype = Int2
+    def __call__(self):
+        return getattr(notes, str(self.name))(self.notetype), self.payload
 
 class Span(Struct):
     """
@@ -99,7 +89,7 @@ class FileNote(VarStruct):
     """
     Note containing file mappings in ELF core
     """
-    count, align, tail = Long, Long, Tail
+    count, align, tail = Long, Long, data.Tail
 
     @CacheAttr
     def spans(self):
@@ -110,7 +100,7 @@ class FileNote(VarStruct):
     @CacheAttr
     def names(self):
         """ Null terminated strings """
-        return Strings(0)(self.tail, len(self.spans.mem))
+        return data.Strings(0)(self.tail, len(self.spans.mem), len(self.spans))
 
     def __iter__(self):
         name = iter(self.names)

@@ -18,7 +18,7 @@ def main():
     parser.add_argument("--prefix", type=str, default='')
     parser.add_argument("file")
     args = parser.parse_args()
-    core = Core(memmap(args.file))
+    core = Core(memmap(args.file), args.file)
     linkmap = {linkmap.addr: linkmap.name for linkmap in core.linkmap}
     for name, addr, build_id in core.build_ids():
         if args.list:

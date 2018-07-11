@@ -20,9 +20,6 @@ class Data(metaclass=Meta, length=0):
     def __struct_format__(self):
         return '{}s'.format(self.__namespace__.length)
 
-    def __getattr__(self, name):
-        return self.__namespace__.__getattr__(name)
-
 class Bytes(bytes, Data):
     """
     bytes data element with length keyword, defaulting to zero
@@ -42,6 +39,13 @@ class String(Bytes):
 
     def __str__(self):
         return self.pattern.match(self).group().decode()
+
+class Nulls(Bytes):
+    """
+    bytes data element asserted to be all nulls, returning None
+    """
+    def __new__(cls, bites):
+        assert bites == b'\0'* cls.length
 
 def signer(cls, char):
     """
@@ -93,6 +97,16 @@ class PString(Int):
     def __call__(self, mem, offset):
         return String(mem[offset:][:self])
 
+class Payload(Int(length=2)):
+    """
+    memoryview slice of specified size, defaulting to 32 bit
+    """
+    def __init__(self, size):
+        super().__init__()
+        self.size = size
+    def __call__(self, mem, offset):
+        return mem[offset:][:self.size]
+
 def pad(offset, align):
     """
     Number of bytes to add to offset to align it
@@ -118,18 +132,24 @@ class Strings(Bytes):
         """
         pattern = re.compile(b'([^\0]*)\0')
 
-        def __init__(self, mem, offset):
+        def __init__(self, mem, offset, count):
             self.mem = mem[offset:]
+            self.count = count
 
         def __iter__(self):
+            count = self.count
             for match in self.pattern.finditer(self.mem):
                 yield match.group(1).decode()
+                if count:
+                    count -= 1
+                    if not count:
+                        break
 
         def __len__(self):
             return len(self.mem)
 
-    def __call__(self, mem, offset):
-        return self.Iter(mem, offset)
+    def __call__(self, mem, offset, count=0):
+        return self.Iter(mem, offset, count)
 
 class MTime(Int):
     """

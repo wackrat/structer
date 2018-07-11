@@ -44,18 +44,31 @@ class ClassAttr(object):
     def __get__(self, instance, owner):
         return self.fget(owner)
 
+class MultiDict(dict):
+    """
+    A dict built from an iterator, with tuples as values
+    Values from conflicting keys are grouped.
+    """
+    def __missing__(self, key):
+        return ()
+
+    def __init__(self, iterable):
+        super().__init__()
+        for key, value in iterable:
+            self[key] = value
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, self[key] + (value,))
+
 NULL = type(vars(dict))({})
 
 class NameBase(object):
     """
     Base class for metaclass namespaces; subclasses inherit from specific collection types.
-    The __mapping__ attribute tracks recognized keywords
-    The __member__ attribute is handled by subclasses
-    A keyword is recognized if a default value is provided in a class declaration.
+    Subclasses define the behavior of the attributes.
     """
     def __init__(self, __mapping__=NULL, __member__=(), __iterable__=(), **kwargs):
-        self.__mapping__ = dict(**__mapping__)
-        self.__mapping__.update(**kwargs)
+        self.__mapping__ = {**__mapping__, **kwargs}
         self.__member__ = __member__
         super().__init__(__iterable__)
 
@@ -68,6 +81,7 @@ class NameBase(object):
 class NameSpace(NameBase, dict):
     """
     metaclass namespace
+    The __mapping__ attribute tracks keywords mentioned in class declarations.
     """
     def __call__(self, **kwargs):
         kwargs = {key: value for key, value in kwargs.items()
@@ -76,7 +90,7 @@ class NameSpace(NameBase, dict):
 
 class NameList(NameBase, list):
     """
-    Sequence of callable members with a mapping from name to index
+    Sequence of classes with a mapping from name to index
     This tracks named.Struct members.
     """
     def append(self, item, name):
@@ -92,9 +106,7 @@ class NameList(NameBase, list):
 
 def base_keywords(bases):
     """
-    Extract keywords from compatible base classes
-    A class with a __namespace__ attribute is considered compatible
-    This allows enum.Enum subclasses to provide a __struct_format__ attribute.
+    Extract keywords from base classes with __namespace__ attributes
     """
     mapping = {}
     for base in bases:
@@ -118,6 +130,7 @@ class Meta(type):
 
     def __init__(cls, name, bases, namespace, **kwargs):
         cls.__namespace__ = namespace
+        cls.__getattr__ = Meta.__getattr__
         super().__init__(name, bases, namespace)
 
     def __call__(cls, *args, **kwargs):
