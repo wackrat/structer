@@ -4,13 +4,16 @@ Extensible Link Format represented by named.Struct subclasses
 
 import re
 import struct
-from .. import CacheAttr, MultiDict
+from .. import CacheAttr, MultiDict, AttrDict
 from ..named import StructArray, VarStructArray
 from ..intervals import Intervals
 from ..data import Bytes
 from . import header
 from .enums import PType, AUXVType, Type, DTag
 from .notes import GNU, CORE
+
+class ElfError(Exception):
+    """ Handle header unpack exceptions """
 
 def elftype(head):
     """ Choose class from header type field """
@@ -21,15 +24,13 @@ class Elf(object):
     Extensible Link Format
     """
     def __new__(cls, mem, name=None):
-        ident = header.Ident(mem)
-        kwargs = dict(byteorder=ident.byteorder, wordsize=ident.wordsize)
-        head = header.Header(mem, **kwargs)
+        try:
+            head = header.Header(mem)
+        except (struct.error, ValueError) as exc:
+            raise ElfError(exc)
         elf = super().__new__(elftype(head))
-        elf.mem = mem
-        elf.name = name
-        kwargs.update(fetch=elf.fetch)
-        elf.kwargs = kwargs
-        elf.header = head
+        elf.mem, elf.name, elf.header = mem, name, head
+        elf.kwargs = {**head.ident.kwargs, **dict(fetch=elf.fetch)}
         return elf
 
     def __getattr__(self, name):
@@ -138,8 +139,7 @@ class Core(Elf):
     def auxv(self):
         """ ELF auxiliary vector, keyed by type """
         auxv, = self.note[CORE.Auxv]
-        return dict((aux.type, aux.val)
-                    for aux in StructArray(auxv, self.Auxv))
+        return AttrDict(StructArray(auxv, self.Auxv))
 
     def build_ids(self):
         """ Iterate over readonly executable filenote Elf headers """
@@ -155,14 +155,13 @@ class Core(Elf):
     def linkmap(self):
         """ Return chain of loaded objects from dynamic section Debug element """
         auxv = self.auxv
-        segs = StructArray(self.fetch(auxv[AUXVType.Phdr],
-                                      auxv[AUXVType.PHEnt] * auxv[AUXVType.PHNum]),
-                           self.Phdr)
-        dyn, = (seg for seg in segs if seg.type == PType.Dynamic)
-        phdr, = (seg for seg in segs if seg.type == PType.Phdr)
-        delta = auxv[AUXVType.Phdr] - phdr.vaddr
-        dyns = StructArray(self.fetch(dyn.vaddr + delta, dyn.filesz), self.Dyn)
-        debug, = (element for element in dyns if element.tag == DTag.Debug)
-        linkmap = self.LinkMap(self.fetch(self.DebugInfo(self.fetch(debug.val)).map))
+        mem = self.fetch(auxv.Phdr, auxv.PHEnt * auxv.PHNum)
+        segs = MultiDict((seg.type, seg) for seg in StructArray(mem, self.Phdr))
+        phdr, = segs[PType.Phdr]
+        delta = auxv.Phdr - phdr.vaddr
+        dyn, = segs[PType.Dynamic]
+        dyns = MultiDict(StructArray(self.fetch(dyn.vaddr + delta, dyn.filesz), self.Dyn))
+        debug, = dyns[DTag.Debug]
+        linkmap = self.LinkMap(self.fetch(self.DebugInfo(self.fetch(debug)).map))
         assert linkmap.addr + dyn.vaddr == linkmap.dyn
         return linkmap

@@ -1,2 +1,2 @@
 [MESSAGES CONTROL]
-disable=locally-disabled,too-few-public-methods,no-member,unused-argument,inherit-non-class,unsubscriptable-object,not-an-iterable,too-many-function-args,unexpected-keyword-arg,no-value-for-parameter,invalid-name,undefined-variable,pointless-statement,method-hidden
+disable=locally-disabled,too-few-public-methods,no-member,unused-argument,inherit-non-class,unsubscriptable-object,not-an-iterable,unexpected-keyword-arg,no-value-for-parameter,invalid-name,undefined-variable,pointless-statement,method-hidden,not-a-mapping

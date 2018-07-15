@@ -21,6 +21,11 @@ class Ident(Struct):
     abiversion = data.Int
     padding = data.Nulls(length=7)
 
+    @CacheAttr
+    def kwargs(self):
+        """ wordsize and byteorder """
+        return dict(byteorder=self.byteorder, wordsize=self.wordsize)
+
 class Header(Struct):
     """
     Header of an ELF file
@@ -33,6 +38,9 @@ class Header(Struct):
     flags = Int2
     ehsize, phentsize, phnum = 3*(Int1,)
     shentsize, shnum, shstrndx = 3*(Int1,)
+
+    def __new__(cls, mem, offset=0):
+        return super().__new__(cls(**Ident(mem).kwargs), mem, offset)
 
 class Phdr(object):
     """
