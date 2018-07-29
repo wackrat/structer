@@ -73,6 +73,35 @@ class AttrDict(dict):
     def __getattr__(self, attr):
         return self[getattr(self.type, attr)]
 
+class LazyDict(dict):
+    """
+    A dict built on demand from an iterator
+    Duplicate keys are disallowed
+    """
+    def __init__(self, iterable):
+        super().__init__()
+        self.iterator = iter(iterable)
+
+    def __getitem__(self, item):
+        if item in self:
+            return super().__getitem__(item)
+        else:
+            raise KeyError(item)
+
+    def __contains__(self, item):
+        while not super().__contains__(item):
+            try:
+                (key, value) = next(self.iterator)
+            except StopIteration:
+                return False
+            assert not super().__contains__(key), "Duplicate key"
+            self[key] = value
+        return True
+
+    def get(self, item):
+        item in self
+        return super().get(item)
+
 NULL = type(vars(dict))({})
 
 class NameBase(object):
@@ -105,6 +134,7 @@ class NameList(NameBase, list):
     """
     Sequence of classes with a mapping from name to index
     This tracks named.Struct members.
+    Keyword arguments can be used to specify members.
     """
     def append(self, item, name):
         if name in self.__mapping__:
@@ -114,6 +144,9 @@ class NameList(NameBase, list):
 
     def __call__(self, **kwargs):
         elements = type(self)(__iterable__=(element(**kwargs) for element in self))
+        for key, value in kwargs.items():
+            if key in self.__mapping__ and isinstance(value, type):
+                elements[self.__mapping__[key]] = value(**kwargs)
         same = all(new is old for new, old in zip(elements, self))
         return type(self)(self.__mapping__, self.__member__, elements) if not same else self
 
@@ -143,7 +176,6 @@ class Meta(type):
 
     def __init__(cls, name, bases, namespace, **kwargs):
         cls.__namespace__ = namespace
-        cls.__getattr__ = Meta.__getattr__
         super().__init__(name, bases, namespace)
 
     def __call__(cls, *args, **kwargs):

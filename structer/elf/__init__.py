@@ -6,7 +6,7 @@ import re
 import struct
 from .. import CacheAttr, MultiDict, AttrDict
 from ..named import StructArray, VarStructArray
-from ..intervals import Intervals
+from ..intervals import Seg, Intervals
 from ..data import Bytes
 from . import header
 from .enums import PType, AUXVType, Type, DTag
@@ -46,6 +46,11 @@ class Elf(object):
         return StructArray(phdr, self.Phdr)
 
     @CacheAttr
+    def loadsegs(self):
+        """ program segment headers of type Load, keyed by address """
+        return dict((seg.vaddr, seg) for seg in self.segs if seg.type == PType.Load)
+
+    @CacheAttr
     def sects(self):
         """ Sequence of section headers """
         head = self.header
@@ -55,21 +60,17 @@ class Elf(object):
     @CacheAttr
     def addrindex(self):
         """Space efficient index for binary search """
-        return Intervals((seg.vaddr, seg.filesz, index)
-                         for index, seg in enumerate(self.segs)
-                         if seg.type == PType.Load)
+        return Intervals(Seg(seg.vaddr, seg.offset, seg.filesz)
+                         for seg in self.segs if seg.type == PType.Load)
 
     def fetch(self, addr, size=0):
         """ memoryview slice at specified address """
-        seg = self.segs[self.addrindex[addr]]
-        offset = addr - seg.vaddr
-        assert offset >= 0
-        limit = seg.filesz - offset
-        if size == 0 or size > limit:
-            size = limit
-        if size < 0:
-            raise KeyError
-        return self.mem[seg.offset + offset:][:size]
+        seg = self.addrindex[addr]
+        length = seg.length
+        if size == 0 or size > length:
+            size = length
+        assert size >= 0
+        return self.mem[seg.start:][:size]
 
     def notes(self, segs):
         """ elements within segments of type Note """
@@ -96,14 +97,10 @@ class Elf(object):
         return Bytes(mem)
 
     def find(self, pattern):
-        """
-        Generator for re search on seg contents
-        Does not handle hits which cross seg boundaries
-        """
-        for seg in self.segs:
-            if seg.type == PType.Load:
-                for hit in pattern.finditer(self.fetch(seg.vaddr)):
-                    yield seg.vaddr + hit.start()
+        """ Generator for re search on seg contents """
+        for seg in self.addrindex:
+            for hit in pattern.finditer(self.mem[seg.start:][:seg.length]):
+                yield seg.addr + hit.start()
 
     def findbytes(self, bites):
         """ Generator to locate specified bytes """
@@ -119,15 +116,13 @@ class Core(Elf):
     """
     def __new__(cls, mem, name=None):
         """ Validate type field """
-        elf = super().__new__(cls, mem)
+        elf = super().__new__(cls, mem, name)
         assert elftype(elf.header) is cls, "Not a core"
         return elf
 
     def size(self):
         """ File size predicted by header contents """
-        last = self.segs[self.addrindex.intervals.value[-1]]
-        assert last.type == PType.Load
-        return last.offset + last.filesz
+        return self.addrindex.end
 
     @CacheAttr
     def filenote(self):
@@ -141,15 +136,14 @@ class Core(Elf):
         auxv, = self.note[CORE.Auxv]
         return AttrDict(StructArray(auxv, self.Auxv))
 
-    def build_ids(self):
+    def elves(self):
         """ Iterate over readonly executable filenote Elf headers """
         for mapping in self.filenote:
             if mapping.offset == 0:
-                seg = self.segs[self.addrindex[mapping.start]]
+                seg = self.loadsegs[mapping.start]
                 if seg.filesz > 0 and seg.flags == 5:
-                    assert mapping.start == seg.vaddr
                     head = self.mem[seg.offset:][:seg.filesz]
-                    yield mapping.name, seg.vaddr, Elf(head).build_id()
+                    yield seg.vaddr, Elf(head, mapping.name)
 
     @CacheAttr
     def linkmap(self):

@@ -5,47 +5,63 @@ Space efficient index for binary search
 from bisect import bisect
 import struct
 
-from . import named
+from . import named, CacheAttr
 
-class Interval(named.Tuple):
+class Seg(named.Tuple):
     """
-    Three integers or integer sequences defining spans and values
+    Address, and offset range
     """
-    start, step, value
+    addr, start, length
 
-def pack(fmt, *sequence):
-    """
-    Return a memoryview on a packed Struct for a sequence and format
-    Return a range instead if the sequence allows that
-    """
-    if len(sequence) + sequence[0] == sequence[-1] + 1:
-        arange = range(sequence[0], sequence[-1] + 1)
-        if type(sequence)(arange) == sequence:
-            return arange
-    return memoryview(struct.pack(len(sequence)*fmt, *sequence)).cast(fmt)
+def combine(segs):
+    """ Combine adjacent segs which have no intervening gaps """
+    segs = sorted(segs)
+    for index in range(len(segs), 1, -1):
+        low, high = segs[index-2:index]
+        if high.addr - low.addr == low.length and low.start + low.length == high.start:
+            segs[index-2:index] = [Seg(low.addr, low.start, low.length + high.length)]
+    return segs
 
 class Intervals(object):
     """
-    Space efficient index for binary search, sorted by start
-    The intervals attribute is a named.Tuple with start, step, value attributes
-    Each attribute is either a packed sequence or a range
+    Space efficient index for binary search, sorted by address
+    The segs attribute has multiple (packed) values rather than individual values.
     """
-    def __init__(self, iterable, formats="QQQ"):
-        self.intervals = Interval(*(pack(*sequence)
-                                    for sequence in zip(formats, *sorted(iterable))))
+    def __init__(self, segs, fmt="Q"):
+        segs = combine(segs)
+        fmts = fmt * len(segs)
+        self.segs = Seg(*(memoryview(struct.pack(fmts, *seg)).cast(fmt)
+                          for seg in zip(*sorted(segs))))
+
+    def seg(self, index):
+        """ Return Seg at specified index, from packed values """
+        return Seg(*(element[index] for element in self.segs))
+
+    @CacheAttr
+    def end(self):
+        """
+        Offset just beyond the last element
+        Do not assume offsets are sorted; the address is the sort key.
+        """
+        return max(seg.start + seg.length for seg in self)
 
     def __getitem__(self, key):
-        index = bisect(self.intervals.start, key) - 1
+        index = bisect(self.segs.addr, key) - 1
         if index < 0:
             raise KeyError
-        interval = Interval(*(element[index] for element in self.intervals))
-        assert key >= interval.start
-        if key > interval.start + interval.step:
+        seg = self.seg(index)
+        delta = key - seg.addr
+        assert delta >= 0
+        if delta > seg.length:
             raise KeyError
-        return interval.value
+        return Seg(key, seg.start + delta, seg.length - delta)
 
     def __contains__(self, key):
         try:
             return self[key] is not None
         except KeyError:
             return False
+
+    def __iter__(self):
+        for index in range(len(self.segs.addr)):
+            yield self.seg(index)

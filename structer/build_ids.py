@@ -20,7 +20,8 @@ def main():
     args = parser.parse_args()
     core = Core(memmap(args.file), args.file)
     linkmap = {linkmap.addr: linkmap.name for linkmap in core.linkmap}
-    for name, addr, build_id in core.build_ids():
+    for addr, elf in core.elves():
+        name, build_id = elf.name, elf.build_id()
         if args.list:
             print("{:016x} {} {} ({})".format(addr, build_id, name, linkmap.get(addr)))
         else:

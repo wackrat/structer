@@ -28,3 +28,7 @@ class Linux(Note):
 class stapsdt(Note):
     """ SDT probe """
     version3 = 3
+
+class Go(Note):
+    """ Note from golang binary """
+    PGKList, ABIHash, GoDeps, BuildID = range(1, 5)

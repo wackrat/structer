@@ -54,8 +54,8 @@ class StructDict(NameSpace):
     MetaStruct namespace
     """
     def __setitem__(self, key, value):
-        if isinstance(value, type):
-            self.__member__.append(value, key)
+        if isinstance(value, type) and self.member is None:
+            self.__member__.append(value(**self.__mapping__), key)
         else:
             super().__setitem__(key, value)
 
@@ -81,7 +81,7 @@ class StructAttr(object):
 
 class MetaStruct(Meta):
     """
-    metaclass for namedstruct.Struct
+    metaclass for named.Struct
     class attributes which are classes are expected to have a __struct_format__ attribute
     """
     @classmethod
@@ -92,7 +92,10 @@ class MetaStruct(Meta):
         return cls.__struct__.size
 
     def __init__(cls, name, bases, namespace, **kwargs):
-        struct_format = "@<>"[namespace.byteorder] + ''.join(
+        if namespace.member and not namespace.__member__:
+            namespace.__member__ = NameList(__iterable__=[namespace.member], member=0)
+        cls.__prefix__ = "@<>"[namespace.byteorder]
+        struct_format = cls.__prefix__ + ''.join(
             init.__struct_format__ for init in namespace.__member__)
         cls.__len__ = type(cls).__len__
         cls.__struct__ = struct.Struct(struct_format)
@@ -101,14 +104,21 @@ class MetaStruct(Meta):
             setattr(cls, key, StructAttr(value))
         super().__init__(name, bases, namespace, **kwargs)
 
-class Struct(tuple, metaclass=MetaStruct, byteorder=0):
+class Struct(tuple, metaclass=MetaStruct, byteorder=0, member=None):
     """
     tuple subclass with attribute names and initializers from a class declaration
     """
     def __new__(cls, mem, offset=0):
-        zipped = zip(cls.__namespace__.__member__,
-                     cls.__struct__.unpack_from(mem, offset))
-        return super().__new__(cls, (init(value) for (init, value) in zipped))
+        if cls.member is None:
+            zipped = zip(cls.__namespace__.__member__,
+                         cls.__struct__.unpack_from(mem, offset))
+            return super().__new__(cls, (init(value) for (init, value) in zipped))
+        else:
+            item, = cls.__struct__.unpack_from(mem, offset)
+            item = cls.member(item)
+            return item(mem, offset + len(cls)) if callable(item) else item
+
+    __getattr__ = Meta.__getattr__
 
 class VarStruct(Struct):
     """
@@ -137,6 +147,17 @@ class VarStruct(Struct):
         new.__struct__ = struct.Struct(struct_format)
         new.__struct_format__ = '{}s'.format(new.__struct__.size)
         return new
+
+class VarStructs(VarStruct):
+    """
+    A VarStruct with multiple VarStruct members
+    """
+    @classmethod
+    def __init_format__(cls):
+        return cls.__prefix__
+    @classmethod
+    def __new_iter__(cls, mem, offset):
+        return cls.__namespace__.__member__
 
 class StructArray(object):
     """

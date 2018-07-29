@@ -35,14 +35,21 @@ class Cpio(VarStruct):
     check = Number
     pad = Pad(align=4)
     tail = Tail
+
     @CacheAttr
     def filetype(self):
         """ Extract file type from mode bits """
         return FileType(S_IFMT(self.mode))
+
+    def isreg(self):
+        """ Test for regular file type """
+        return self.filetype == FileType.File
+
     @CacheAttr
     def contents(self):
         """ Slice payload to exclude subsequent content """
         return self.tail[:self.filesize]
+
     def __iter__(self):
         align = type(self).pad.align
         while len(self.tail) > 0:

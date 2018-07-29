@@ -20,6 +20,8 @@ class Data(metaclass=Meta, length=0):
     def __struct_format__(self):
         return '{}s'.format(self.__namespace__.length)
 
+    __getattr__ = Meta.__getattr__
+
 class Bytes(bytes, Data):
     """
     bytes data element with length keyword, defaulting to zero

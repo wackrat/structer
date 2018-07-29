@@ -61,8 +61,8 @@ class Machine(Enum, Int(length=1)):
 class PType(Enum, Int(length=2)):
     """ ELF segment type """
     Null, Load, Dynamic, Interp, Note, ShLib, Phdr, Tls, Num = range(0, 9)
-    LOOS = 0x60000000
     GNU_EH_Frame, GNU_Stack, GNU_Relro = range(0x6474e550, 0x6474e553)
+    PAX_Flags = 0x65041580
 
 class SType(Enum, Int(length=2)):
     """ Elf section type """
