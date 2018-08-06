@@ -111,9 +111,8 @@ class FileNote(VarStruct):
         return data.Strings(0)(self.tail, len(self.spans.mem), len(self.spans))
 
     def __iter__(self):
-        name = iter(self.names)
-        for span in self.spans:
-            yield FileMapping(next(name), *span)
+        for name, span in zip(self.names, self.spans):
+            yield FileMapping(name, *span)
 
 class Auxv(Struct):
     """

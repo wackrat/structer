@@ -94,7 +94,7 @@ class DTag(Enum, Long):
     VerSym, RelaCount, RelCount, Flags1 = 0x6ffffff0, 0x6ffffff9, 0x6ffffffa, 0x6ffffffb
     VerDef, VerDefNum, VerNeed, VerNeedNum = range(0x6ffffffc, 0x70000000)
 
-class DebugState(Long, Enum):
+class DebugState(Enum, Long):
     """  Enumeration of DebugInfo state values """
     Consistent = 0
     Add = 1

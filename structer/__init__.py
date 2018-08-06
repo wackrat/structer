@@ -60,18 +60,23 @@ class MultiDict(dict):
     def __setitem__(self, key, value):
         super().__setitem__(key, self[key] + (value,))
 
-class AttrDict(dict):
+class AttrDict(MultiDict):
     """
     A dict built from an iterator, with an attribute shortcut
-    Keys are required to all have the same type
+    Keys are required to all have the same type.
+    Attribute lookups work only on singleton values.
     """
 
     def __init__(self, iterable):
         super().__init__(iterable)
-        self.type, = set(type(item) for item in self)
+        if self:
+            self.type, = set(type(item) for item in self)
 
     def __getattr__(self, attr):
-        return self[getattr(self.type, attr)]
+        if not self:
+            raise AttributeError
+        value, = self[getattr(self.type, attr)]
+        return value
 
 class LazyDict(dict):
     """

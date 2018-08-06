@@ -4,12 +4,12 @@ Extensible Link Format represented by named.Struct subclasses
 
 import re
 import struct
-from .. import CacheAttr, MultiDict, AttrDict
+from .. import CacheAttr, MultiDict, AttrDict, LazyDict
 from ..named import StructArray, VarStructArray
 from ..intervals import Seg, Intervals
 from ..data import Bytes
 from . import header
-from .enums import PType, AUXVType, Type, DTag
+from .enums import PType, SType, AUXVType, Type, DTag
 from .notes import GNU, CORE
 
 class ElfError(Exception):
@@ -18,6 +18,10 @@ class ElfError(Exception):
 def elftype(head):
     """ Choose class from header type field """
     return {Type.Core : Core}.get(head.type, Elf)
+
+def segdict(mem, segtype):
+    """ Group segments and sections by type """
+    return AttrDict((seg.type, seg) for seg in StructArray(mem, segtype))
 
 class Elf(object):
     """
@@ -42,54 +46,53 @@ class Elf(object):
     def segs(self):
         """ Sequence of program segment headers """
         head = self.header
-        phdr = self.mem[head.phoff:][:head.phnum * head.phentsize]
-        return StructArray(phdr, self.Phdr)
+        return segdict(self.mem[head.phoff:][:head.phnum * head.phentsize], self.Phdr)
 
     @CacheAttr
     def loadsegs(self):
         """ program segment headers of type Load, keyed by address """
-        return dict((seg.vaddr, seg) for seg in self.segs if seg.type == PType.Load)
+        return LazyDict((seg.vaddr, seg) for seg in self.segs[PType.Load])
 
     @CacheAttr
     def sects(self):
         """ Sequence of section headers """
         head = self.header
-        shdr = self.mem[head.shoff:][:head.shnum * head.shentsize]
-        return StructArray(shdr, self.Shdr)
+        return segdict(self.mem[head.shoff:][:head.shnum * head.shentsize], self.Shdr)
 
     @CacheAttr
     def addrindex(self):
         """Space efficient index for binary search """
         return Intervals(Seg(seg.vaddr, seg.offset, seg.filesz)
-                         for seg in self.segs if seg.type == PType.Load)
+                         for seg in self.segs[PType.Load])
 
     def fetch(self, addr, size=0):
         """ memoryview slice at specified address """
         seg = self.addrindex[addr]
-        length = seg.length
+        offset = addr - seg.addr
+        length = seg.length - offset
         if size == 0 or size > length:
             size = length
         assert size >= 0
-        return self.mem[seg.start:][:size]
+        offset += seg.start
+        if offset + size > len(self.mem):
+            assert offset + size <= self.addrindex.end
+            raise ElfError("truncated file")
+        return self.mem[offset:][:size]
 
     def notes(self, segs):
         """ elements within segments of type Note """
         for seg in segs:
-            if seg.type == seg.type.Note:
-                notes = self.mem[seg.offset:][:seg.filesz]
-                for note in VarStructArray(notes, self.Note):
-                    yield note()
+            for note in VarStructArray(self.mem[seg.offset:][:seg.filesz], self.Note):
+                yield note()
 
     @CacheAttr
     def note(self):
         """
         Notes keyed by type
-        Work around malformatted Elf objects.
+        Prefer notes from section headers, if present.
         """
-        try:
-            return MultiDict(self.notes(self.segs))
-        except AttributeError:
-            return MultiDict(self.notes(self.sects))
+        notes = MultiDict(self.notes(self.sects[SType.Note]))
+        return notes if notes else MultiDict(self.notes(self.segs[PType.Note]))
 
     def build_id(self):
         """ Contents of GNUNote.Build_ID note """
@@ -150,12 +153,10 @@ class Core(Elf):
         """ Return chain of loaded objects from dynamic section Debug element """
         auxv = self.auxv
         mem = self.fetch(auxv.Phdr, auxv.PHEnt * auxv.PHNum)
-        segs = MultiDict((seg.type, seg) for seg in StructArray(mem, self.Phdr))
-        phdr, = segs[PType.Phdr]
+        segs = segdict(mem, self.Phdr)
+        phdr, dyn = segs.Phdr, segs.Dynamic
         delta = auxv.Phdr - phdr.vaddr
-        dyn, = segs[PType.Dynamic]
-        dyns = MultiDict(StructArray(self.fetch(dyn.vaddr + delta, dyn.filesz), self.Dyn))
-        debug, = dyns[DTag.Debug]
-        linkmap = self.LinkMap(self.fetch(self.DebugInfo(self.fetch(debug)).map))
+        dyns = AttrDict(StructArray(self.fetch(dyn.vaddr + delta, dyn.filesz), self.Dyn))
+        linkmap = self.LinkMap(self.fetch(self.DebugInfo(self.fetch(dyns.Debug)).map))
         assert linkmap.addr + dyn.vaddr == linkmap.dyn
         return linkmap

@@ -3,7 +3,7 @@ Space efficient index for binary search
 """
 
 from bisect import bisect
-import struct
+from struct import pack
 
 from . import named, CacheAttr
 
@@ -30,8 +30,7 @@ class Intervals(object):
     def __init__(self, segs, fmt="Q"):
         segs = combine(segs)
         fmts = fmt * len(segs)
-        self.segs = Seg(*(memoryview(struct.pack(fmts, *seg)).cast(fmt)
-                          for seg in zip(*sorted(segs))))
+        self.segs = Seg(*(memoryview(pack(fmts, *seg)).cast(fmt) for seg in zip(*segs)))
 
     def seg(self, index):
         """ Return Seg at specified index, from packed values """
@@ -50,11 +49,9 @@ class Intervals(object):
         if index < 0:
             raise KeyError
         seg = self.seg(index)
-        delta = key - seg.addr
-        assert delta >= 0
-        if delta > seg.length:
+        if key - seg.addr > seg.length:
             raise KeyError
-        return Seg(key, seg.start + delta, seg.length - delta)
+        return seg
 
     def __contains__(self, key):
         try:
