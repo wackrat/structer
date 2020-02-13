@@ -130,10 +130,12 @@ class NameSpace(NameBase, dict):
     metaclass namespace
     The __mapping__ attribute tracks keywords mentioned in class declarations.
     """
-    def __call__(self, **kwargs):
-        kwargs = {key: value for key, value in kwargs.items()
-                  if key in self.__mapping__ and kwargs[key] != self.__mapping__[key]}
-        return type(self)(self.__mapping__, self.__member__, self, **kwargs) if kwargs else self
+    def __call__(self, new=False, **kwargs):
+        if not new:
+            kwargs = {key: value for key, value in kwargs.items()
+                      if key in self.__mapping__ and kwargs[key] != self.__mapping__[key]}
+        return type(self)(self.__mapping__, self.__member__, self,
+                          **kwargs) if new or kwargs else self
 
 class NameList(NameBase, list):
     """
@@ -147,34 +149,37 @@ class NameList(NameBase, list):
         self.__mapping__[name] = len(self)
         super().append(item)
 
-    def __call__(self, **kwargs):
+    def __call__(self, new=False, **kwargs):
         elements = type(self)(__iterable__=(element(**kwargs) for element in self))
         for key, value in kwargs.items():
             if key in self.__mapping__ and isinstance(value, type):
                 elements[self.__mapping__[key]] = value(**kwargs)
-        same = all(new is old for new, old in zip(elements, self))
-        return type(self)(self.__mapping__, self.__member__, elements) if not same else self
+        new = new or not all(new is old for new, old in zip(elements, self))
+        return type(self)(self.__mapping__, self.__member__, elements) if new else self
 
-def base_keywords(bases):
+def keywords(bases):
     """
     Extract keywords from base classes with __namespace__ attributes
     """
-    mapping = {}
     for base in bases:
         try:
-            mapping.update(**base.__namespace__.__mapping__)
+            yield base.__namespace__.__mapping__
         except AttributeError:
             pass
-    return mapping
 
 class Meta(type):
     """
-    metaclass for keyword-specified classes which derive variants
-    The __call__ method can derive a subclass with different keyword values.
+    metaclass for classes which derive variants via keyword values
     """
+    __namespace__ = NameSpace
+    __member__ = tuple
     @classmethod
     def __prepare__(mcs, name, bases, **kwargs):
-        return NameSpace(__mapping__=base_keywords(bases), **kwargs)
+        __mapping__ = {key: value for base in keywords(bases) for key, value in base.items()}
+        try:
+            return bases[0].__namespace__(new=True, **{**__mapping__, **kwargs})
+        except (IndexError, AttributeError):
+            return mcs.__namespace__(__mapping__, mcs.__member__(), **kwargs)
 
     def __new__(mcs, name, bases, namespace, **kwargs):
         return super().__new__(mcs, name, bases, namespace)
@@ -186,7 +191,7 @@ class Meta(type):
     def __call__(cls, *args, **kwargs):
         namespace = cls.__namespace__(**kwargs)
         if namespace is not cls.__namespace__:
-            cls = type(cls)(cls.__name__, (cls,) + cls.__bases__, namespace, **kwargs)
+            cls = type(cls)(cls.__name__, (cls,), namespace, **kwargs)
         return super().__call__(*args) if args else cls
 
     def __getattr__(cls, name):

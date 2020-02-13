@@ -4,8 +4,9 @@ ELF file header
 
 from .. import CacheAttr, data
 from ..named import Struct, VarStruct, StructArray, Tuple
-from ..data import Long, String, Pad
+from ..data import Long
 from . import enums, notes
+from .dtags import DTag
 
 Int1, Int2, Int3 = (data.Int(length=length) for length in (1, 2, 3))
 
@@ -26,14 +27,13 @@ class Ident(Struct):
         """ wordsize and byteorder """
         return dict(byteorder=self.byteorder, wordsize=self.wordsize)
 
-class Header(Struct):
+class Header(Ident):
     """
     Header of an ELF file
     """
-    ident = Ident
     type = enums.Type
     machine = enums.Machine
-    version = enums.Version(length=2)
+    Version = enums.Version(length=2)
     entry, phoff, shoff = 3*(Long,)
     flags = Int2
     ehsize, phentsize, phnum = 3*(Int1,)
@@ -76,9 +76,9 @@ class Note(VarStruct):
     Elf Note
     """
     name = data.PString(length=2)
-    namepad = Pad(align=4)
+    namepad = data.Pad(align=4)
     payload = data.Payload
-    paypad = Pad(align=4)
+    paypad = data.Pad(align=4)
     notetype = Int2
     def __call__(self):
         return getattr(notes, str(self.name))(self.notetype), self.payload
@@ -121,9 +121,9 @@ class Auxv(Struct):
     type = enums.AUXVType
     val = Long
 
-class Dyn(Struct):
+class Dyn(Struct, tag=DTag):
     """ ELF dynamic section """
-    tag = enums.DTag
+    tag = DTag
     val = Long
 
 class DebugInfo(Struct):
@@ -141,7 +141,7 @@ class LinkMap(VarStruct, fetch=None):
         """ Address of null terminated string """
         def __call__(self, mem, offset):
             try:
-                return str(String(self.fetch(self)))
+                return str(data.String(self.fetch(self)))
             except KeyError:
                 return ''
     dyn, next, prev = 3*(Long,)

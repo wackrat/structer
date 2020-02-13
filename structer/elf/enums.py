@@ -30,6 +30,9 @@ class AUXVType(Enum, Long):
     IgnorePPC, Secure, Base_Platform, Random, HWCap2 = range(22, 27)
     ExecFn, SysInfo, SysInfo_EHdr, L1I_CacheShape = range(31, 35)
     L1D_CacheShape, L2_CacheShape, L3_CacheShape = range(35, 38)
+    L1I_CacheSize, L1I_CacheGeometry, L1D_CacheSize, L1D_CacheGeometry = range(40, 44)
+    L2_CacheSize, L2_CacheGeometry, L3_CacheSize, L3_CacheGeometry = range(44, 48)
+    MinSigStackSize = 51
 
 class OSABI(Enum, Int):
     """ ELF OS ABI """
@@ -79,20 +82,6 @@ class Note(Enum, Int(length=2)):
 
     def __hash__(self):
         return hash(repr(self))
-
-class DTag(Enum, Long):
-    """ Tag values in ELF dynamic section """
-    Null, Needed, PLTRelSz, PLTGOT, Hash = range(0, 5)
-    StrTab, SymTab, Rela, RelaSz, RelaEnt = range(5, 10)
-    StrSz, SymEnt, Init, Fini, SoName = range(10, 15)
-    Rpath, Symbolic, Rel, RelSz, RelEnt = range(15, 20)
-    PLTRel, Debug, TextRel, JmpRel, BindNow = range(20, 25)
-    InitArray, FiniArray, InitArraySz, FiniArraySz, RunPath = range(25, 30)
-    Flags, PreInitArray, PreInitArraySz, Num = 30, 32, 33, 34
-    GnuHash, TLSDescPLT, TLSDescGOT, GnuConflict, GnuLibList, Config = range(0x6ffffef5, 0x6ffffefb)
-    DepAudit, Audit, PLTPad, MoveTab, SymInfo = range(0x6ffffefb, 0x6fffff00)
-    VerSym, RelaCount, RelCount, Flags1 = 0x6ffffff0, 0x6ffffff9, 0x6ffffffa, 0x6ffffffb
-    VerDef, VerDefNum, VerNeed, VerNeedNum = range(0x6ffffffc, 0x70000000)
 
 class DebugState(Enum, Long):
     """  Enumeration of DebugInfo state values """

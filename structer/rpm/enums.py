@@ -1,5 +1,7 @@
 """
 Enumerated types for RPM
+Tag and HeaderTag members are from
+https://github.com/rpm-software-management/rpm/blob/master/lib/rpmtag.h
 """
 import re
 from .. import CacheAttr
@@ -29,8 +31,7 @@ class HeaderTag(Enum, Int(length=2)):
     """ RPM header tag """
     immutable, i18ntable = 63, 100
     name, version, release, epoch = range(1000, 1004)
-    summary, description = 1004, 1005
-    buildtime, buildhost, installtime = 1006, 1007, 1008
+    summary, description, buildtime, buildhost, installtime = range(1004, 1009)
     size, distribution, vendor = range(1009, 1012)
     license, packager, group, changelog, source, patch = range(1014, 1020)
     url, os, arch, prein, postin, preun, postun = range(1020, 1027)
@@ -53,7 +54,11 @@ class HeaderTag(Enum, Int(length=2)):
     filecolor, fileclass, classdict = range(1140, 1143)
     filedependsx, filedependsn, dependsdict, sourcepkgid, filecontents = range(1143, 1148)
     pretrans, posttrans, pretransprog, posttransprog = range(1151, 1155)
-    digest = 5011
+    filecaps, filedigestalgo = 5010, 5011
+    ordername, orderversion, orderflags = range(5035, 5038)
+    recommendname, recommendversion, recommendflags = range(5046, 5049)
+    suggestname, suggestversion, suggestflags = range(5049, 5052)
+    encoding, payloaddigest, payloaddigestalgo = 5062, 5092, 5093
 
 class TagType(Enum, Int(length=2)):
     """ RPM header tagtype """

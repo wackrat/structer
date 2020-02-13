@@ -9,7 +9,8 @@ from ..named import StructArray, VarStructArray
 from ..intervals import Seg, Intervals
 from ..data import Bytes
 from . import header
-from .enums import PType, SType, AUXVType, Type, DTag
+from .enums import PType, SType, Type
+from . import dtags
 from .notes import GNU, CORE
 
 class ElfError(Exception):
@@ -34,7 +35,7 @@ class Elf(object):
             raise ElfError(exc)
         elf = super().__new__(elftype(head))
         elf.mem, elf.name, elf.header = mem, name, head
-        elf.kwargs = {**head.ident.kwargs, **dict(fetch=elf.fetch)}
+        elf.kwargs = {**head.kwargs, **dict(fetch=elf.fetch)}
         return elf
 
     def __getattr__(self, name):
@@ -139,6 +140,11 @@ class Core(Elf):
         auxv, = self.note[CORE.Auxv]
         return AttrDict(StructArray(auxv, self.Auxv))
 
+    @CacheAttr
+    def dtag(self):
+        """ Enum for dynamic tag values """
+        return getattr(dtags, str(self.header.machine), dtags.DTag)(**self.kwargs)
+
     def elves(self):
         """ Iterate over readonly executable filenote Elf headers """
         for mapping in self.filenote:
@@ -156,7 +162,8 @@ class Core(Elf):
         segs = segdict(mem, self.Phdr)
         phdr, dyn = segs.Phdr, segs.Dynamic
         delta = auxv.Phdr - phdr.vaddr
-        dyns = AttrDict(StructArray(self.fetch(dyn.vaddr + delta, dyn.filesz), self.Dyn))
+        dyns = AttrDict(StructArray(self.fetch(dyn.vaddr + delta, dyn.filesz),
+                                    self.Dyn(tag=self.dtag)))
         linkmap = self.LinkMap(self.fetch(self.DebugInfo(self.fetch(dyns.Debug)).map))
         assert linkmap.addr + dyn.vaddr == linkmap.dyn
         return linkmap

@@ -2,7 +2,7 @@
 Enum with keyword-specified variants
 """
 
-from . import base_keywords, NameSpace, Meta, NULL
+from . import NameSpace, Meta
 
 class EnumDict(NameSpace):
     """
@@ -21,10 +21,9 @@ class EnumDict(NameSpace):
             self.__member__[value] = key
             self.__member__.__mapping__[key] = value
 
-    def __init__(self, __mapping__=NULL, __member__=(), __iterable__=(), **kwargs):
-        if __member__:
-            __member__ = type(__member__)(__mapping__={**__member__.__mapping__},
-                                          __iterable__=__member__)
+    def __init__(self, __mapping__, __member__, __iterable__=(), **kwargs):
+        __member__ = type(__member__)(__mapping__={**__member__.__mapping__},
+                                      __iterable__=__member__)
         super().__init__(__mapping__, __member__, __iterable__, **kwargs)
 
 class EnumAttr(object):
@@ -41,9 +40,8 @@ class MetaEnum(Meta):
     """
     metaclass for Enum
     """
-    @classmethod
-    def __prepare__(mcs, name, bases, **kwargs):
-        return EnumDict(__mapping__=base_keywords(bases), __member__=NameSpace({}), **kwargs)
+    __namespace__ = EnumDict
+    __member__ = NameSpace
 
     def __init__(cls, name, bases, namespace, **kwargs):
         super().__init__(name, bases, namespace)

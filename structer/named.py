@@ -5,7 +5,7 @@ Assign attribute names to tuple indices
 import struct
 from operator import itemgetter
 
-from . import CacheAttr, base_keywords, NameSpace, NameList, Meta
+from . import CacheAttr, NameSpace, NameList, Meta
 
 class TupleDict(dict):
     """
@@ -59,10 +59,10 @@ class StructDict(NameSpace):
         else:
             super().__setitem__(key, value)
 
-    def __call__(self, **kwargs):
-        elements = self.__member__(**kwargs)
+    def __call__(self, new=False, **kwargs):
+        elements = self.__member__(new=new, **kwargs)
         if elements is not self.__member__:
-            self = type(self)(self.__mapping__, __member__=elements, __iterable__=self)
+            self = type(self)(self.__mapping__, __member__=elements, __iterable__=self, **kwargs)
         return super().__call__(**kwargs)
 
 class StructAttr(object):
@@ -82,11 +82,10 @@ class StructAttr(object):
 class MetaStruct(Meta):
     """
     metaclass for named.Struct
-    class attributes which are classes are expected to have a __struct_format__ attribute
+    members are expected to have a __struct_format__ attribute
     """
-    @classmethod
-    def __prepare__(mcs, name, bases, **kwargs):
-        return StructDict(__mapping__=base_keywords(bases), __member__=NameList(), **kwargs)
+    __namespace__ = StructDict
+    __member__ = NameList
 
     def __len__(cls):
         return cls.__struct__.size
