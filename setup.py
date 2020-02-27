@@ -3,7 +3,7 @@
 from setuptools import setup
 
 setup(name='structer',
-      version='0.1.2',
+      version='0.1.3',
       description='Interpret packed binary data using named attributes',
       url='https://github.com/wackrat/structer',
       author='Eirik Fuller',
@@ -17,8 +17,9 @@ setup(name='structer',
 
           'License :: OSI Approved :: MIT License',
 
-          'Programming Language :: Python :: 3.5',
+          'Programming Language :: Python :: 3',
       ],
+      python_requires='>=3.5',
       packages=['structer', 'structer.elf'],
       entry_points={
           'console_scripts': [

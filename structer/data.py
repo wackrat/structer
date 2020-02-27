@@ -65,23 +65,20 @@ class Int(int, Data, signed=False, base=None):
     def __new__(cls, value):
         if cls.base is None:
             return super().__new__(cls, value)
-        else:
-            return super().__new__(cls, value, base=cls.base)
+        return super().__new__(cls, value, base=cls.base)
 
     @ClassAttr
     def __struct_format__(self):
         length = self.length
         if self.base is None:
             return signer(self, "bhiq"[length])
-        else:
-            return '{}s'.format(length)
+        return '{}s'.format(length)
 
     def __len__(self):
         length = self.length
         if self.base is None:
             return 1 << length
-        else:
-            return length
+        return length
 
 class Long(Int, wordsize=0):
     """

@@ -90,8 +90,7 @@ class LazyDict(dict):
     def __getitem__(self, item):
         if item in self:
             return super().__getitem__(item)
-        else:
-            raise KeyError(item)
+        raise KeyError(item)
 
     def __contains__(self, item):
         while not super().__contains__(item):
@@ -130,6 +129,10 @@ class NameSpace(NameBase, dict):
     metaclass namespace
     The __mapping__ attribute tracks keywords mentioned in class declarations.
     """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.pop('__classcell__', None)
+
     def __call__(self, new=False, **kwargs):
         if not new:
             kwargs = {key: value for key, value in kwargs.items()

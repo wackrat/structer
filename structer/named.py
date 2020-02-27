@@ -18,10 +18,9 @@ class TupleDict(dict):
     def __missing__(self, key):
         if hasattr(object, key):
             raise KeyError
-        elif key in self.__names__:
+        if key in self.__names__:
             raise KeyError("Duplicate name")
-        else:
-            self.__names__ += key,
+        self.__names__ += key,
 
 class MetaTuple(type):
     """
@@ -76,8 +75,7 @@ class StructAttr(object):
     def __get__(self, instance, owner):
         if instance is None:
             return owner.__namespace__.__member__[self.index]
-        else:
-            return instance[self.index]
+        return instance[self.index]
 
 class MetaStruct(Meta):
     """
@@ -112,10 +110,9 @@ class Struct(tuple, metaclass=MetaStruct, byteorder=0, member=None):
             zipped = zip(cls.__namespace__.__member__,
                          cls.__struct__.unpack_from(mem, offset))
             return super().__new__(cls, (init(value) for (init, value) in zipped))
-        else:
-            item, = cls.__struct__.unpack_from(mem, offset)
-            item = cls.member(item)
-            return item(mem, offset + len(cls)) if callable(item) else item
+        item, = cls.__struct__.unpack_from(mem, offset)
+        item = cls.member(item)
+        return item(mem, offset + len(cls)) if callable(item) else item
 
     __getattr__ = Meta.__getattr__
 
@@ -129,7 +126,7 @@ class VarStruct(Struct):
         return tuple.__iter__(super().__new__(cls, mem, offset))
     @classmethod
     def __init_format__(cls):
-        return cls.__struct__.format.decode()
+        return cls.__struct_format__
     def __new__(cls, mem, offset=0):
         iterable = cls.__new_iter__(mem, offset)
         struct_format = cls.__init_format__()
@@ -181,8 +178,7 @@ class StructArray(object):
     def __getitem__(self, index):
         if isinstance(index, slice):
             return tuple(self)[index]
-        else:
-            return self.fetch(self.offset[index])
+        return self.fetch(self.offset[index])
 
     def __iter__(self):
         offset = 0
