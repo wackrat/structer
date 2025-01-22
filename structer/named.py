@@ -46,7 +46,7 @@ class Tuple(tuple, metaclass=MetaTuple):
     Base class for tuples with attribute names
     """
     def __repr__(self):
-        return "{}{}".format(self.__class__.__name__, super().__repr__())
+        return f"{self.__class__.__name__}{super().__repr__()}"
 
 class StructDict(NameSpace):
     """
@@ -96,7 +96,7 @@ class MetaStruct(Meta):
             init.__struct_format__ for init in namespace.__member__)
         cls.__len__ = type(cls).__len__
         cls.__struct__ = struct.Struct(struct_format)
-        cls.__struct_format__ = '{}s'.format(len(cls))
+        cls.__struct_format__ = f'{len(cls)}s'
         for key, value in namespace.__member__.__mapping__.items():
             setattr(cls, key, StructAttr(value))
         super().__init__(name, bases, namespace, **kwargs)
@@ -137,11 +137,11 @@ class VarStruct(Struct):
                 item = item(mem, offset)
                 length = len(item)
                 offset += length
-                struct_format += '{}s'.format(length)
+                struct_format += f'{length}s'
             items.append(item)
         new = tuple.__new__(cls, items)
         new.__struct__ = struct.Struct(struct_format)
-        new.__struct_format__ = '{}s'.format(new.__struct__.size)
+        new.__struct_format__ = f'{new.__struct__.size}s'
         return new
 
 class VarStructs(VarStruct):

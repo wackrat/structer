@@ -18,7 +18,7 @@ class Data(metaclass=Meta, length=0):
     """
     @ClassAttr
     def __struct_format__(self):
-        return '{}s'.format(self.__namespace__.length)
+        return f'{self.__namespace__.length}s'
 
     __getattr__ = Meta.__getattr__
 
@@ -28,7 +28,7 @@ class Bytes(bytes, Data):
     Render in hexadecimal
     """
     def __str__(self):
-        return (len(self)*"{:02x}").format(*self)
+        return self.hex()
 
     def __repr__(self):
         return str(self)
@@ -72,7 +72,7 @@ class Int(int, Data, signed=False, base=None):
         length = self.length
         if self.base is None:
             return signer(self, "bhiq"[length])
-        return '{}s'.format(length)
+        return f'{length}s'
 
     def __len__(self):
         length = self.length

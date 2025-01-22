@@ -23,10 +23,10 @@ def main():
     for addr, elf in core.elves():
         name, build_id = elf.name, elf.build_id()
         if args.list:
-            print("{:016x} {} {} ({})".format(addr, build_id, name, linkmap.get(addr)))
+            print(f"{addr:016x} {build_id} {name} ({linkmap.get(addr)})")
         else:
             try:
                 elf_id = Elf(memmap(args.prefix + name), name).build_id()
-                assert  elf_id == build_id, "{}: {} != {}".format(name, elf_id, build_id)
+                assert  elf_id == build_id, f"{name}: {elf_id} != {build_id}"
             except (AssertionError, FileNotFoundError) as exc:
                 print(build_id, exc)

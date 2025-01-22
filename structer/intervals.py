@@ -29,7 +29,7 @@ class Intervals(object):
     """
     def __init__(self, segs, fmt="Q"):
         segs = combine(segs)
-        fmts = fmt * len(segs)
+        fmts = f'{len(segs)}{fmt}'
         self.segs = Seg(*(memoryview(pack(fmts, *seg)).cast(fmt) for seg in zip(*segs)))
 
     def seg(self, index):
